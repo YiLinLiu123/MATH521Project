@@ -3,12 +3,12 @@ clear
 close all
 dx = 1; 
 dy = 1; 
-c = 1; %speed of sound in air
+c = 10; %speed of sound in air
 gamma = 1.4; %specific heat ratio
-dt = 0.5;
+dt = 1;
 
-xRange = -24:dx:24; 
-yRange = -24:dy:24;
+xRange = -23:dx:23; 
+yRange = -23:dy:23;
 
 % constants
 u_Mean = 0;
@@ -19,56 +19,69 @@ mean_Values = [rho_Mean, u_Mean, v_Mean, p_Mean];
 
 % initialize the matrix
 [X,Y]= meshgrid(xRange,yRange);
-Un(:,:,1) = ones(size(X,1),size(X,2)).*rho_Mean;
+Un(:,:,1) = zeros(size(X,1),size(X,2));
 Un(:,:,2) = zeros(size(X,1),size(X,2));
 Un(:,:,3) = zeros(size(X,1),size(X,2));
-Un(:,:,4) = ones(size(X,1),size(X,2)).*p_Mean;
+Un(:,:,4) = zeros(size(X,1),size(X,2));
 
 
 %source function
 epi= 0.5; 
 alpha = log(2)/5;
 w = 2*pi/30;
-S = @(x1,x2,t) epi.*exp(-alpha.*(x1.^2+x2.^2)).*sin(w.*t).*[1/(mean_Values(1)/dx*c);0;0;1/(mean_Values(1)*c^3/dx)]; %monopole only  density perturbation
+S = @(x1,x2,t) epi.*exp(-alpha.*(x1.^2+x2.^2)).*sin(w.*t).*[1;0;0;1]; %monopole only  density perturbation
 STest = @(x1,x2,t) epi.*exp(-alpha.*(x1.^2+x2.^2)).*sin(w.*t); %monopole only for density perturbation
 
 
 
 %% Running the code
 
+%{
 %just do like one time step and lets see what we get. 
-for n = 1:30
+for n = 1:500
     Un = RK4(Un,n*dt,S,dt,mean_Values, gamma,c,5, xRange,yRange);
 end 
+%}
 
 %% plotting things
+
+%{
 close all
 %plot density
 figure1 = figure();
-surf(X(3:end-3,3:end-3),Y(3:end-3,3:end-3),Un(3:end-3,3:end-3,1))
+surf(X(:,:),Y(:,:),Un(:,:,1))
 title("Density")
+xlabel("xlabel")
+ylabel("ylabel")
 
 figure2 = figure();
-surf(X(3:end-3,3:end-3),Y(3:end-3,3:end-3),Un(3:end-3,3:end-3,2))
+surf(X(:,:),Y(:,:),Un(:,:,2))
 title("U")
+xlabel("x")
+ylabel("y")
 
 figure3 = figure();
-surf(X(3:end-3,3:end-3),Y(3:end-3,3:end-3),Un(3:end-3,3:end-3,3))
+surf(X(:,:),Y(:,:),Un(:,:,3))
 title("V")
+xlabel("x")
+ylabel("y")
 
 figure4 = figure();
-surf(X(4:end-3,4:end-3),Y(4:end-3,4:end-3),abs(Un(4:end-3,4:end-3,4)))
+surf(X(4:end-3,4:end-3),Y(4:end-3,4:end-3),Un(4:end-3,4:end-3,4))
 title("pressure")
-
+xlabel("x")
+ylabel("y")
 
 figure5 = figure();
 plot(X(24,:),Un(24,:,4));
 title("Pressure along y=0")
+xlabel("x")
+ylabel("y")
 
 figure6 = figure()
 contour(X(:,:),Y(:,:),abs(Un(:,:,4)));
 title("Pressure contours")
-
+%}
 %% Testing Section
 
     %{
@@ -83,6 +96,7 @@ title("Pressure contours")
     E_row= [1,2,3,4,5,6,7]; %use this foreverything
     F_Col = [7;6;5;4;3;2;1];
     a_Values = [-0.02651995,0.18941314,-0.79926643,0,0.79926643,-0.18941314,0.02651995];
+    mean_Values = [1.225, 0, 0, 1E5];
     
     Test_E = assembleE7Point(a_Values,gamma,c,mean_Values,E_row,E_row,E_row,E_row);
     Test_E(1)
@@ -104,36 +118,41 @@ title("Pressure contours")
 
     % initialize empty data place holders
     [X,Y]= meshgrid(xRange,yRange);
-    all = zeros(size(X,1),size(X,2));
-    all(4,:) = [1,2,3,4,5,6,7];
-    all(:,4) = [1,2,3,4,5,6,7];
-    K_test = assembleK(0,S,meanValues,gamma,all,all,all,all,xRange,yRange)
+    vector = 1:49; 
+    matrix = reshape(vector, [7,7]);
+    U(:,:,1) = matrix; 
+    U(:,:,2) = matrix;
+    U(:,:,3) = matrix; 
+    U(:,:,4) = matrix;
+    
+    mean_Values = [1.0, 0, 0, 1];
+    a_Values = [-0.02651995,0.18941314,-0.79926643,0,0.79926643,-0.18941314,0.02651995];
+    K_Test = assembleK(0,S,mean_Values,gamma,c,U,xRange,yRange);
     %}
+    
 
-    %{
-    %Testing the boundary formulation. OLD, du/dt = 0 and wrong 
-    list = 1:121;
-    list_Matrix = reshape(list, [11,11]);
-    K_Test(:,:,1) = list_Matrix;
-    K_Test(:,:,2) = list_Matrix;
-    K_Test(:,:,3) = list_Matrix;
-    K_Boundary = NoMeanFlowBoundary(K_Test);
-    %}
-
-%{
     %Testing the boundary formulation. OLD, du/dt = 0 and wrong 
     %looks good at first glance, might have to come back and do a proper
     %debug. 
     list = 1:121;
-    list_Matrix = reshape(list, [11,11]);
-    xRange = ones(1,11);
-    yRange = xRange;
-    K_Test(:,:,1) = list_Matrix;
-    K_Test(:,:,2) = list_Matrix;
-    K_Test(:,:,3) = list_Matrix;
-    K_Test(:,:,4) = list_Matrix;
-    K_Boundary = NoMeanFlowBoundary(K_Test,xRange, yRange,[1,1,1,1,1,1,1],1);
-%}
+    matrix = reshape(list, [11,11]);
+    U(:,:,1) = matrix;
+    U(:,:,2) = matrix;
+    U(:,:,3) = matrix;
+    U(:,:,4) = matrix;
+    
+    xRange = -5:5; 
+    yRange = -5:5;
+    c=1;
+    gamma = 1.4;
+    
+    a_Values = [-0.02651995,0.18941314,-0.79926643,0,0.79926643,-0.18941314,0.02651995];
+    K =  assembleK(0,S,mean_Values,gamma,c,U,xRange,yRange);
+    U_Boundary = NoMeanFlowBoundary(c,U,K,xRange,yRange);
+    K_Boundary = assembleK(0,S,mean_Values,gamma,c,U_Boundary,xRange,yRange);
+    topLeftU = 4+-12/a_Values(1) + c/(2*sqrt(8)*a_Values(1))*37;
+    
+    %{
     %testing the damping term implementation:
     vector = 1:49; 
     matrix_2d = reshape(vector, [7,7]);
@@ -143,8 +162,12 @@ title("Pressure contours")
     matrix_3d(:,:,4) = matrix_2d; 
     damped = dampingTerm(5,matrix_3d);
     
-
-
+    d_Values = [0.023853048191,-0.106303578770,0.226146951809,0.287392842460,-0.226146951809,0.106303578770,-0.023853048191];
+    row = [4,11,18,25,32,39,46];
+    col = [22,23,24,25,26,27,28];
+    expectedCenter = (-1/5).*dot(d_Values, row+col);
+    
+%}
     
     
 %% Functions
@@ -181,20 +204,67 @@ function Unp1 = RK4(Un,t,S,dt,mean_Values, gamma, c,Rs,xRange,yRange)
     
     %calculate the stages
     K = assembleK(t,S,mean_Values,gamma,c,Un,xRange,yRange);
+    
+    %need to check CHECK HERE
     for i = 2:4
        
        U_Inter = Un +beta_List(i).*K;
        %boundary conditions patched here.
        U_Inter = NoMeanFlowBoundary(U_Inter,xRange,yRange,a_Values,c);
        K = dt.*assembleK(t,S,mean_Values,gamma,c,U_Inter,xRange,yRange);
+       %K = U_Inter;
     end
+   
     Damping = dampingTerm(Rs, Un);
     Unp1 = Un+ K+dt.*beta_List(4).*Damping;
-    %boundary Value again before passing onto the next time step 
     Unp1 = NoMeanFlowBoundary(Unp1,xRange,yRange,a_Values,c);
+    
     
 end
 
+
+%NoMeanFlowBoundary: populates ghost cell value for no mean flow value
+% Input:
+%   c: speed of sound
+%   U: the matricies storing the values of acoustic perturbation
+%              variables at the current time step
+%   dx: cell spacing in x 
+%   dy: cellspacing in y
+%   xRange: x-domain
+%   yRange: y-domain
+% Output:
+%   U_boundary: boundary have been modified
+function U_Boundary = NoMeanFlowBoundary(c,U,K,xRange,yRange)
+    a_Values = [-0.02651995,0.18941314,-0.79926643,0,0.79926643,-0.18941314,0.02651995];
+    U_Boundary = U;
+    % TAKE the difference at the outermost cells for bc
+    for z = 1:4
+       for i = 4:length(yRange)-3 %assume sqaure 
+          %Left BC
+          r = sqrt(xRange(4).^2 + yRange(i).^2);
+          U_Boundary(i,1,z) = U_Boundary(i,1,z) +K(i,4,z)./a_Values(1);%+ (c/(2*r*a_Values(1))).*U_Boundary(i,4,z);
+         
+          %Right BC
+          U_Boundary(i,end,z) = U_Boundary(i,end,z) +K(i,end-3,z)./a_Values(7);%+ (c/(2*r*a_Values(7))).*U_Boundary(i,end-3,z);
+       end
+       
+       for j = 5:length(xRange)-4
+           r = sqrt(xRange(j).^2 + yRange(4).^2);
+           % bottom BC
+           U_Boundary(1,j,z) = U_Boundary(1,j,z)+K(4,j,z)./a_Values(1);%+(c/(2*r*a_Values(1))).*U_Boundary(4,j,z);
+           
+           %top BC
+           U_Boundary(end,j,z) = U_Boundary(end,j,z)+ K(end-3,j,z)./a_Values(7);%+(c/(2*r*a_Values(7))).*U_Boundary(end-3,j,z);
+           
+       end 
+       
+    end
+    
+ 
+
+
+
+end
 
 % assembleK:assemble spatial discretization for estimation of time gradient
 % Input:
@@ -247,13 +317,13 @@ function K = assembleK(t,S,mean_Values,gamma,c,U,xRange,yRange)
             % Construct E,F, call it Z
             E = assembleE7Point(a_Values,gamma,c,mean_Values,rho_Row,u_Row,v_Row,p_Row);
             F = assembleF7Point(a_Values,gamma,c,mean_Values,rho_Col,u_Col,v_Col,p_Col);
-            Z_ij = E+F;
+            Z_ij = E.*(1/dx)+F.*(1/dy);
             
             % Source 
             S_ij = S(xRange(i),yRange(j),t);
             
             %K matrix ASSEMbly
-            K(i,j,1:4) = (dx/c).*(Z_ij+S_ij);
+            K(i,j,1:4) = -1.*Z_ij+S_ij;
         end 
     end
     
@@ -324,7 +394,7 @@ function E= assembleE7Point(a_Values,gamma,c,mean_Values,rho_Row,u_Row,v_Row,p_R
     E(1) = dot(a_Values, u_Row);
     E(2) = dot(a_Values, p_Row);
     E(3) = 0;
-    E(4) = dot(a_Values, (gamma.*(p_Mean/c^2/rho_Mean).*u_Row));
+    E(4) = dot(a_Values, (gamma.*(p_Mean/rho_Mean).*u_Row));
 
 end 
     
@@ -357,75 +427,6 @@ function F = assembleF7Point(a_Values,gamma,c,mean_Values,rho_Col,u_Col,v_Col,p_
     F(1) = dot(a_Values, v_Col);
     F(2) = 0;
     F(3) = dot(a_Values, p_Col);
-    F(4) = dot(a_Values, gamma.*(p_Mean/(c^2*rho_Mean)).*v_Col);
+    F(4) = dot(a_Values, gamma.*(p_Mean/rho_Mean).*v_Col);
 
 end 
-
-%NoMeanFlowBoundary: populates ghost cell value for no mean flow value
-% Inputs:
-%   U: the cell values at the current time step 
-%   xRange: the range of X-values
-%   yRange: the range of y-values
-%   a_Values: 
-%   c: speed of sound
-% Output:
-%   U_boundary: boundary have been modified
-function U_Boundary = NoMeanFlowBoundary(U,xRange,yRange,a_Values,c)
-%function K_Boundary = NoMeanFlowBoundary(K)
- 
-    % Re-implementation
-    U_Boundary = U; 
-    r_Values =sqrt(max(xRange(4:end-3)).^2+ yRange(4:end-3).*yRange(4:end-3)); %assume square domain and origin source for easy computation,ie r is the same   
-    coefficients = ((c)/a_Values(7))./(2.*r_Values);
-  
-    for i = 1:4
-        U_4Col = U(4:end-3,4,i);
-        U_endM3Col = U(4:end-3,end-3,i);
-        U_4Row = U(4,4:end-3,i);
-        U_EndM3Row = U(end-3,4:end-3,i);
-        
-        U_Boundary(4:end-3,1,i) =coefficients'.*U_4Col+ U_Boundary(4:end-3,7,i);
-        U_Boundary(4:end-3,end,i) = coefficients'.*U_endM3Col+U_Boundary(4:end-3, end-6,i);
-        U_Boundary(1,4:end-3,i) = coefficients.*U_4Row+U_Boundary(7,4:end-3,i);
-        U_Boundary(end,4:end-3,i) = coefficients.* U_EndM3Row+U_Boundary(end-6,4:end-3,i);
-    end 
-    % kept the same. 
-    U_Boundary(4:end-3,3,:) = U_Boundary(4:end-3,5,:);
-    U_Boundary(4:end-3,2,:) = U_Boundary(4:end-3,6,:);
-    U_Boundary(4:end-3,end-2,:) = U_Boundary(4:end-3,end-4,:);
-    U_Boundary(4:end-3,end-1,:) = U_Boundary(4:end-3,end-5,:);
-    
-    U_Boundary(3,4:end-3,:) = U_Boundary(5,4:end-3,:);
-    U_Boundary(2,4:end-3,:) = U_Boundary(6,4:end-3,:);
-    U_Boundary(end-2,4:end-3,:) = U_Boundary(end-4, 4:end-3,:);
-    U_Boundary(end-1,4:end-3,:) = U_Boundary(end-5, 4:end-3,:);
-    
-    
-    
-    %{
-    
-    % This part is incorrect, so I will comment it out for now and re-do
-    % this really quick
-    %just set the values to be equal to eachother because of symmetric but
-    %opposite sign coefficients for spatial scheme.
-    K_Boundary = K; 
-    
-    K_Boundary(4:end-3,1,:) = K_Boundary(4:end-3,7,:);
-    K_Boundary(4:end-3,2,:) = K_Boundary(4:end-3,6,:);
-    K_Boundary(4:end-3,3,:) = K_Boundary(4:end-3,5,:);
-    K_Boundary(4:end-3,end,:) = K_Boundary(4:end-3, end-6,:);
-    K_Boundary(4:end-3,end-1,:) = K_Boundary(4:end-3,end-5,:);
-    K_Boundary(4:end-3,end-2,:) = K_Boundary(4:end-3,end-4,:);
-    
-    
-    K_Boundary(1,4:end-3,:) = K_Boundary(7,4:end-3,:);
-    K_Boundary(2,4:end-3,:) = K_Boundary(6, 4:end-3,:);
-    K_Boundary(3,4:end-3,:) = K_Boundary(5, 4:end-3,:);
-    K_Boundary(end,4:end-3,:) = K_Boundary(end-6,4:end-3,:);
-    K_Boundary(end-1,4:end-3,:) = K_Boundary(end-5, 4:end-3,:);
-    K_Boundary(end-2,4:end-3,:) = K_Boundary(end-4, 4:end-3,:);
-    
-    %}
-end
-
-

@@ -7,14 +7,14 @@ c = 343; %speed of sound in air
 gamma = 1.4; %specific heat ratio
 dt = 0.5;
 
-xRange = -24:dx:24; 
-yRange = -24:dy:24;
+xRange = -23:dx:23; 
+yRange = -23:dy:23;
 
 % constants
 u_Mean = 0;
 v_Mean = 0; 
 rho_Mean = 1.225; 
-p_Mean = 100E3; 
+p_Mean = c^2*rho_Mean; 
 mean_Values = [rho_Mean, u_Mean, v_Mean, p_Mean];
 
 % initialize the matrix
@@ -36,34 +36,45 @@ STest = @(x1,x2,t) epi.*exp(-alpha.*(x1.^2+x2.^2)).*sin(w.*t); %monopole only fo
 
 %% Running the code
 
+
 %just do like one time step and lets see what we get. 
-for n = 1:10
-    Un = RK4(Un,n*dt,S,dt,mean_Values, gamma,c,5, xRange,yRange);
+for n = 1:1
+    Un = RK4(Un,n*dt,S,dt,mean_Values, gamma,c,10, xRange,yRange);
 end 
+
 
 %% plotting things
 close all
 %plot density
 figure1 = figure();
-surf(X(3:end-3,3:end-3),Y(3:end-3,3:end-3),Un(3:end-3,3:end-3,1))
+surf(X(:,:),Y(:,:),Un(:,:,1))
 title("Density")
+xlabel("xlabel")
+ylabel("ylabel")
 
 figure2 = figure();
-surf(X(3:end-3,3:end-3),Y(3:end-3,3:end-3),Un(3:end-3,3:end-3,2))
+surf(X(:,:),Y(:,:),Un(:,:,2))
 title("U")
+xlabel("x")
+ylabel("y")
 
 figure3 = figure();
-surf(X(3:end-3,3:end-3),Y(3:end-3,3:end-3),Un(3:end-3,3:end-3,3))
+surf(X(:,:),Y(:,:),Un(:,:,3))
 title("V")
+xlabel("x")
+ylabel("y")
 
 figure4 = figure();
-surf(X(4:end-3,4:end-3),Y(4:end-3,4:end-3),Un(4:end-3,4:end-3,4))
+surf(X(:,:),Y(:,:),Un(:,:,4))
 title("pressure")
-
+xlabel("x")
+ylabel("y")
 
 figure5 = figure();
 plot(X(24,:),Un(24,:,4));
 title("Pressure along y=0")
+xlabel("x")
+ylabel("y")
 
 figure6 = figure()
 contour(X(:,:),Y(:,:),abs(Un(:,:,4)));
@@ -185,6 +196,7 @@ function Unp1 = RK4(Un,t,S,dt,mean_Values, gamma, c,Rs,xRange,yRange)
     
     %calculate the stages
     K = assembleK(t,S,mean_Values,gamma,c,Un,xRange,yRange);
+    
     %need to check CHECK HERE
     for i = 2:4
        
@@ -192,11 +204,13 @@ function Unp1 = RK4(Un,t,S,dt,mean_Values, gamma, c,Rs,xRange,yRange)
        %boundary conditions patched here.
        U_Inter = NoMeanFlowBoundary(U_Inter,xRange,yRange,a_Values,c);
        K = dt.*assembleK(t,S,mean_Values,gamma,c,U_Inter,xRange,yRange);
+       %K = U_Inter;
     end
+   
     Damping = dampingTerm(Rs, Un);
     Unp1 = Un+ K+dt.*beta_List(4).*Damping;
-    %boundary Value again before passing onto the next time step 
     Unp1 = NoMeanFlowBoundary(Unp1,xRange,yRange,a_Values,c);
+    
     
 end
 
@@ -258,7 +272,7 @@ function K = assembleK(t,S,mean_Values,gamma,c,U,xRange,yRange)
             S_ij = S(xRange(i),yRange(j),t);
             
             %K matrix ASSEMbly
-            K(i,j,1:4) = (dx/c).*(Z_ij+S_ij);
+            K(i,j,1:4) = (dx/c).*(-1.*Z_ij+S_ij);
         end 
     end
     
