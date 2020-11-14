@@ -32,16 +32,28 @@ w = 2*pi/30;
 S = @(x1,x2,t) epi.*exp(-alpha.*(x1.^2+x2.^2)).*sin(w.*t).*[1;0;0;1]; %monopole only  density perturbation
 STest = @(x1,x2,t) epi.*exp(-alpha.*(x1.^2+x2.^2)).*sin(w.*t); %monopole only for density perturbation
 
+%matrix of coefficients
+optimized7Centered = [-0.02651995,0.18941314,-0.79926643,0,0.79926643,-0.18941314,0.02651995];
+    %website: https://bellaard.com/tools/Finite%20difference%20coefficient%20calculator/
+back1 = (1/dx^4)*[-1/6,1,-3/2,-2/3,7/2,-3,5/6]; % -4,-3,-2,-1,0,1,2
+back2 = (1/dx^4)*[5/6,-6,37/2,-92/3,57/2,-14,17/6]; % -5,-4,-3,-2,-1,0,1
+back3 = (1/dx^4)*[17/6,-19,107/2,-242/3,137/2,-31,35/6];% -6,-5,-4,-3,-2,-1,0
+forward1 = (1/dx^4)*[5/6,-3,7/2,-2/3,-3/2,1,-1/6]; %-2,-1,0,1,2,3,4
+forward2 = (1/dx^4)*[17/6,-14,57/2,-92/3,37/2,-6,5/6]; %-1,0,1,2,3,4,5
+forward3 = (1/dx^4)*[35/6,-31,137/2,-242/3,107/2,-19,17/6];%0,1,2,3,4,5,6
+
+coeffM = [optimized7Centered; back1;back2;back3;forward1;forward2;forward3];
 
 
 %% Running the code
 
 %{
 %just do like one time step and lets see what we get. 
-for n = 1:500
-    Un = RK4(Un,n*dt,S,dt,mean_Values, gamma,c,5, xRange,yRange);
+for n = 1:5
+    Un = RK4(Un,n*dt,S,dt,mean_Values, gamma,c,5, xRange,yRange,coeffM);
 end 
 %}
+
 
 %% plotting things
 
@@ -111,7 +123,7 @@ title("Pressure contours")
     Test_F(4)
     %}
 
-    %{
+    
     % testing spatial function to see if it runs. 
     xRange = -3:3; 
     yRange = -3:3;
@@ -121,25 +133,47 @@ title("Pressure contours")
     vector = 1:49; 
     matrix = reshape(vector, [7,7]);
     U(:,:,1) = matrix; 
-    U(:,:,2) = matrix;
-    U(:,:,3) = matrix; 
-    U(:,:,4) = matrix;
+    U(:,:,2) = matrix./5;
+    U(:,:,3) = matrix./3;
+    U(:,:,4) = matrix./2;
     
     mean_Values = [1.0, 0, 0, 1];
     a_Values = [-0.02651995,0.18941314,-0.79926643,0,0.79926643,-0.18941314,0.02651995];
-    K_Test = assembleK(0,S,mean_Values,gamma,c,U,xRange,yRange);
-    %}
+    K_Test = assembleK(0,S,mean_Values,gamma,c,U,xRange,yRange,coeffM);
     
-
+    
+    %U(1) Values
+    E_Vec_C = U(4,:,2);
+    F_Vec_C = U(:,4,3)';
+    E = dot(coeffM(1,:),E_Vec_C);
+    F = dot(coeffM(1,:),F_Vec_C');
+    K_1_C = -E-F;
+    K_1_1 = -1.*(dot(coeffM(1,:),E_Vec_C) + dot(coeffM(7,:),F_Vec_C));
+    K_1_2 = -1.*(dot(coeffM(1,:),E_Vec_C) + dot(coeffM(6,:),F_Vec_C));
+    K_1_3 = -1.*(dot(coeffM(1,:),E_Vec_C) + dot(coeffM(5,:),F_Vec_C));
+    
+    %center node U(2)
+    E_Vec_C2 = U(4,:,4);
+    K_2_C = -1.*dot(coeffM(1,:),E_Vec_C2); %the rest should be the same since the stencils are the same and the same weights
+    
+    %U(3)
+    F_Vec_C3 =U(:,4,4);
+    K_3_C = -1.*dot(coeffM(1,:),F_Vec_C3);
+    K_3_1 = -1.* dot(coeffM(7,:),F_Vec_C3);
+    K_3_2 = -1.* dot(coeffM(6,:),F_Vec_C3);
+    K_3_3 = -1.* dot(coeffM(5,:),F_Vec_C3);
+    
+    %U(4) values are just scaled by gamma, easy to check
+%{
     %Testing the boundary formulation. OLD, du/dt = 0 and wrong 
     %looks good at first glance, might have to come back and do a proper
     %debug. 
     list = 1:121;
     matrix = reshape(list, [11,11]);
     U(:,:,1) = matrix;
-    U(:,:,2) = matrix;
-    U(:,:,3) = matrix;
-    U(:,:,4) = matrix;
+    U(:,:,2) = matrix./5;
+    U(:,:,3) = matrix./3;
+    U(:,:,4) = matrix./2;
     
     xRange = -5:5; 
     yRange = -5:5;
@@ -151,7 +185,8 @@ title("Pressure contours")
     U_Boundary = NoMeanFlowBoundary(c,U,K,xRange,yRange);
     K_Boundary = assembleK(0,S,mean_Values,gamma,c,U_Boundary,xRange,yRange);
     topLeftU = 4+-12/a_Values(1) + c/(2*sqrt(8)*a_Values(1))*37;
-    
+    %}
+
     %{
     %testing the damping term implementation:
     vector = 1:49; 
@@ -186,10 +221,11 @@ title("Pressure contours")
 %   Rs: reynolds number for the mesh
 %   xRange:
 %   xRange:
+%   coeffM: matrix of spatial coefficients
 % Outputs:
 %   Unp1: the next time step values, non-dimensionalized here. 
 
-function Unp1 = RK4(Un,t,S,dt,mean_Values, gamma, c,Rs,xRange,yRange)
+function Unp1 = RK4(Un,t,S,dt,mean_Values, gamma, c,Rs,xRange,yRange,coeffM)
     c_List = [1,0.5,0.162997,0.0407574];
     
     %calculate beta values
@@ -203,21 +239,22 @@ function Unp1 = RK4(Un,t,S,dt,mean_Values, gamma, c,Rs,xRange,yRange)
     a_Values = [-0.02651995,0.18941314,-0.79926643,0,0.79926643,-0.18941314,0.02651995];
     
     %calculate the stages
-    K = assembleK(t,S,mean_Values,gamma,c,Un,xRange,yRange);
+    K = assembleK(t,S,mean_Values,gamma,c,Un,xRange,yRange,coeffM);
+
     
     %need to check CHECK HERE
     for i = 2:4
        
        U_Inter = Un +beta_List(i).*K;
        %boundary conditions patched here.
-       U_Inter = NoMeanFlowBoundary(U_Inter,xRange,yRange,a_Values,c);
-       K = dt.*assembleK(t,S,mean_Values,gamma,c,U_Inter,xRange,yRange);
+       U_Inter = NoMeanFlowBoundary(c,U_Inter,K,xRange,yRange);
+       K = dt.*assembleK(t,S,mean_Values,gamma,c,U_Inter,xRange,yRange,coeffM);
        %K = U_Inter;
     end
    
     Damping = dampingTerm(Rs, Un);
     Unp1 = Un+ K+dt.*beta_List(4).*Damping;
-    Unp1 = NoMeanFlowBoundary(Unp1,xRange,yRange,a_Values,c);
+    Unp1 = NoMeanFlowBoundary(c,Unp1,xRange,yRange,coeffM);
     
     
 end
@@ -232,37 +269,13 @@ end
 %   dy: cellspacing in y
 %   xRange: x-domain
 %   yRange: y-domain
+%   coeffM: coefficient for spatial discretizations
 % Output:
 %   U_boundary: boundary have been modified
-function U_Boundary = NoMeanFlowBoundary(c,U,K,xRange,yRange)
+function U_Boundary = NoMeanFlowBoundary(c,U,K,xRange,yRange,coeffM)
     a_Values = [-0.02651995,0.18941314,-0.79926643,0,0.79926643,-0.18941314,0.02651995];
     U_Boundary = U;
-    % TAKE the difference at the outermost cells for bc
-    for z = 1:4
-       for i = 4:length(yRange)-3 %assume sqaure 
-          %Left BC
-          r = sqrt(xRange(4).^2 + yRange(i).^2);
-          U_Boundary(i,1,z) = U_Boundary(i,1,z) +K(i,4,z)./a_Values(1);%+ (c/(2*r*a_Values(1))).*U_Boundary(i,4,z);
-         
-          %Right BC
-          U_Boundary(i,end,z) = U_Boundary(i,end,z) +K(i,end-3,z)./a_Values(7);%+ (c/(2*r*a_Values(7))).*U_Boundary(i,end-3,z);
-       end
-       
-       for j = 5:length(xRange)-4
-           r = sqrt(xRange(j).^2 + yRange(4).^2);
-           % bottom BC
-           U_Boundary(1,j,z) = U_Boundary(1,j,z)+K(4,j,z)./a_Values(1);%+(c/(2*r*a_Values(1))).*U_Boundary(4,j,z);
-           
-           %top BC
-           U_Boundary(end,j,z) = U_Boundary(end,j,z)+ K(end-3,j,z)./a_Values(7);%+(c/(2*r*a_Values(7))).*U_Boundary(end-3,j,z);
-           
-       end 
-       
-    end
-    
- 
-
-
+    U_Boundary;
 
 end
 
@@ -280,53 +293,141 @@ end
 %   dy: cellspacing in y
 %   xRange: x-domain
 %   yRange: y-domain
+%   coeffM: matrix of spatial coefficients
 % Output:
 %   K: matrix of [X,Y,4] for the dU/dt of the solution. 
-function K = assembleK(t,S,mean_Values,gamma,c,U,xRange,yRange)
+function K = assembleK(t,S,mean_Values,gamma,c,U,xRange,yRange,coeffM)
     %list of coefficients a-3,a-2,a-1,a0,a1,a2,a3
-    a_Values = [-0.02651995,0.18941314,-0.79926643,0,0.79926643,-0.18941314,0.02651995];
-   
-    rho = U(:,:,1);
-    u = U(:,:,2);
-    v = U(:,:,3);
-    p = U(:,:,4);
+    a_Values = coeffM(1,:);
     
     %other constants
-    x_IndexRange = 4: size(rho,2)-3; %the actual value cells, not including ghost cells;
-    y_IndexRange = 4:size(rho,1)-3;
+    x_IndexRange = 4: length(xRange)-3; %the actual value cells, not including ghost cells;
+    y_IndexRange = 4:length(yRange)-3;
     dx = abs(xRange(2)-xRange(1));
     dy = abs(yRange(2)-yRange(1));
+    interiorEndXDir = length(xRange)-3;
+    interiorEndYDir = length(yRange)-3;
+    jEnd = length(xRange);
+    iEnd = length(yRange);
     
     %PlaceHolder
-    K = zeros(size(rho,2),size(rho,1),4);
-    % construct the E,F matrices through for loop for each i,j
-    for i = x_IndexRange
-        for j = y_IndexRange
+    K = zeros(length(yRange),length(xRange),4);
+
+
+    %Better Method
+     for i = 1:iEnd
+        for j = 1:jEnd
+            %initialize the terms
+            E = zeros(4,1);
+            F = zeros(4,1);
+            S_ij = S(xRange(j),yRange(i),t); 
             
-            %7 point things
-            rho_Row = rho(i,j-3:j+3);
-            rho_Col = u(i-3:i+3,j);
-            u_Row = u(i,j-3:j+3);
-            u_Col = u(i-3:i+3,j);
-            v_Row = v(i,j-3:j+3);
-            v_Col = v(i-3:i+3,j);
-            p_Row = p(i,j-3:j+3);
-            p_Col = p(i-3:i+3,j);
+            % Lets compute the E(x derivatives)
+            if( j>= 4 && j<=interiorEndXDir)
+                %we are in the interior x domain
+                E = assembleE7Point(coeffM(1,:),gamma,c,mean_Values,U(i,j-3:j+3,1),U(i,j-3:j+3,2),U(i,j-3:j+3,3),U(i,j-3:j+3,4));
+                E = (1/dx).*E;
+            elseif(j<=3)
+                %we are in the left boundary x domain (spatially)
+                %need forward differencing here
+                rowIndices = 1:7;
+                E = assembleE7Point(coeffM(7-j+1,:),gamma,c,mean_Values,U(i,rowIndices ,1),U(i,rowIndices,2),U(i,rowIndices,3),U(i,rowIndices,4));
+            else  
+                %we are in the right boundary x domain (spatially)
+                %need backward differencing here
+                coeffIndex = 4-(jEnd-j);
+                rowIndices = jEnd-6: jEnd;
+                E = assembleE7Point(coeffM(coeffIndex,:),gamma,c,mean_Values,U(i,rowIndices,1),U(i,rowIndices,2),U(i,rowIndices,3),U(i,rowIndices,4));
+        
+            end 
             
+            %lets compute the F(y Derivatives)
+            if( i>= 4 && i<=interiorEndYDir)
+                %we are in the interior y domain
+                F = assembleF7Point(coeffM(1,:),gamma,c,mean_Values,U(i-3:i+3,j,1),U(i-3:i+3,j,2),U(i-3:i+3,j,3),U(i-3:i+3,j,4));
+                F = (1/dx).*F;
+            elseif(i<=3)
+                % we are at the bottom boundary region (spatially)
+                % need forward differencing 
+                coeffIndex = 7-i+1;
+                colIndices = 1:7;
+                F = assembleF7Point(coeffM(coeffIndex,:),gamma,c,mean_Values,U(colIndices,j,1),U(colIndices,j,2),U(colIndices,j,3),U(colIndices,j,4));
+                
+            else
+                % we are at the top Boundary region(spatially)
+                coeffIndex = 4 - (iEnd - i);
+                colIndices = iEnd-6:iEnd;
+                F = assembleF7Point(coeffM(coeffIndex,:),gamma,c,mean_Values,U(colIndices,j,1),U(colIndices,j,2),U(colIndices,j,3),U(colIndices,j,4));
+            end
             
-            % Construct E,F, call it Z
-            E = assembleE7Point(a_Values,gamma,c,mean_Values,rho_Row,u_Row,v_Row,p_Row);
-            F = assembleF7Point(a_Values,gamma,c,mean_Values,rho_Col,u_Col,v_Col,p_Col);
+            %K matrix ASSEMbly
+            K(i,j,1:4) = -1.*(E+F)+S_ij;
+        end 
+     end
+    
+    
+    %{
+    % construct the E,F matrices through for loop for all of I,J, just do
+    % cases
+    for i = 1:length(yRange)
+        for j = 1:length(xRange)
+            E = zeros(4,1);
+            F = zeros(4,1);
+            if( i<= length(yRange)-3 && i>= 4 && j<= length(xRange)-3 && j>=4)
+                rho_Row = U(i,j-3:j+3,1);
+                rho_Col = U(i-3:i+3,j,1);
+                u_Row = U(i,j-3:j+3,2);
+                u_Col = U(i-3:i+3,j,2);
+                v_Row = U(i,j-3:j+3,3);
+                v_Col = U(i-3:i+3,j,3);
+                p_Row = U(i,j-3:j+3,4);
+                p_Col = U(i-3:i+3,j,4);
+                % Construct E,F, call it Z
+                E = assembleE7Point(a_Values,gamma,c,mean_Values,rho_Row,u_Row,v_Row,p_Row);
+                F = assembleF7Point(a_Values,gamma,c,mean_Values,rho_Col,u_Col,v_Col,p_Col);
+            
+            %{    
+            elseif( i >= 1 && i<=3 && j>= 4 && j<= length(xRange)-3)
+                %bottom portion 
+                
+                %derivative in Y is all forward differencing
+                F = assembleF7Point(coeffM(7-i+1,:),gamma,c,mean_Values,U(1:7,j,1),U(1:7,j,2),U(1:7,j,3),U(1:7,j,3));
+
+                %derivative in X is the same everywhere because we have enough
+                %nodes
+                E = assembleE7Point(coeffM(1,:),gamma,c,mean_Values,U(i,j-3:j+3,1),U(i,j-3:j+3,2),U(i,j-3:j+3,3),U(i,j-3:j+3,4));
+
+            end
+            %}
+                
             Z_ij = E.*(1/dx)+F.*(1/dy);
-            
             % Source 
-            S_ij = S(xRange(i),yRange(j),t);
+            S_ij = S(xRange(j),yRange(i),t); 
             
             %K matrix ASSEMbly
             K(i,j,1:4) = -1.*Z_ij+S_ij;
         end 
     end
-    
+    %}
+    %{
+    %Now do the bottom portion of the boundary excluding the 3x3
+    for i = 1:3
+        for j = 4:length(xRange)-3
+            %derivative in Y is straight forward. 
+            F = assembleF7Point(coeffM(7-i+1,:),gamma,c,mean_Values,U(1:7,j,1),U(1:7,j,2),U(1:7,j,3),U(1:7,j,3));
+            
+            %derivative in X is the same everywhere because we have enough
+            %nodes
+            E = assembleE7Point(coeffM(1,:),gamma,c,mean_Values,U(i,j-3:j+3,1),U(i,j-3:j+3,2),U(i,j-3:j+3,3),U(i,j-3:j+3,4));
+            
+            %source computation
+            S_ij = S(xRange(j),yRange(i),t);
+            
+            K(i,j,1:4) = -1.*F+-1.*E+S_ij;
+        end
+    end 
+    %}
+    %}
 end 
 
 %dampingTerm: Implements damping for our scheme. 
@@ -419,9 +520,6 @@ function F = assembleF7Point(a_Values,gamma,c,mean_Values,rho_Col,u_Col,v_Col,p_
     u_Mean = mean_Values(2);
     v_Mean = mean_Values(3);
     p_Mean = mean_Values(4);
-    
-    u_Col = u_Col;
-    v_Col = v_Col; 
     
     % put together F
     F(1) = dot(a_Values, v_Col);
