@@ -5,7 +5,7 @@ dx = 1;
 dy = 1; 
 c = 343; %speed of sound in air
 gamma = 1.4; %specific heat ratio
-dt = 0.5;
+dt = 1/c;
 
 xRange = -23:dx:23; 
 yRange = -23:dy:23;
