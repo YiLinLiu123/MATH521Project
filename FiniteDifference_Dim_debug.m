@@ -1,4 +1,4 @@
-%% set up the domain including 3 ghost cells
+i%% set up the domain including 3 ghost cells
 clear
 close all
 dx = 1; 
@@ -117,7 +117,7 @@ coeffM = [optimized7Centered; back1_opt;back2_opt;back3_opt;forward1_opt;forward
 
 
 %just do like one time step and lets see what we get. 
-for n = 1:16
+for n = 1:17
     Un = RK4(Un,n*dt,S,dt,mean_Values, gamma,c,1, xRange,yRange,coeffM);
 end 
 
@@ -148,7 +148,7 @@ xlabel("x")
 ylabel("y")
 
 figure4 = figure();
-surf(X(4:end-3,4:end-3),Y(4:end-3,4:end-3),Un(4:end-3,4:end-3,4))
+surf(X(:,:),Y(:,:),Un(:,:,4))
 title("pressure")
 xlabel("x")
 ylabel("y")
@@ -164,17 +164,23 @@ contour(X(:,:),Y(:,:),abs(Un(:,:,4)));
 title("Pressure contours")
 
 
+
 %% Testing Section
 
-    %{
+    
     % testing Source, looks reasonable
-    S_Test = STest(X,Y,0);
+    %{
+    xRange = -23:dx:23; 
+    yRange = -23:dy:23;
+    [X,Y]= meshgrid(xRange,yRange);
+    S_Test = STest(X,Y,pi/2);
     surf(X,Y,S_Test)
     %}
 
-    %{
+
     %Testing E,F 7 point schemes, a test case is implemented in excel to
     %double check passed for E. LOOKS REASONABLE
+    %{
     E_row= [1,2,3,4,5,6,7]; %use this foreverything
     F_Col = [7;6;5;4;3;2;1];
     a_Values = [-0.02651995,0.18941314,-0.79926643,0,0.79926643,-0.18941314,0.02651995];
@@ -193,8 +199,9 @@ title("Pressure contours")
     Test_F(4)
     %}
 
-    
-    % testing spatial function to see if it runs. 
+    % testing spatial function to see if it runs.
+    %{
+     
     xRange = -4:4; 
     yRange = -4:4;
     
@@ -256,6 +263,7 @@ title("Pressure contours")
     K_BL == K_Test( BL_I, BL_J,1)
     
     
+
     %expected top right corner
     TR_I = 1;
     TR_J = 9;
@@ -269,9 +277,10 @@ title("Pressure contours")
     K_TR =-1*(E_TR+F_TR+U_TR);
     K_TR == K_Test( TR_I, TR_J,1)
     
-
-    %{
+%}
+    
     %testing the damping term implementation:
+    %{
     vector = 1:49; 
     matrix_2d = reshape(vector, [7,7]);
     matrix_3d(:,:,1) = matrix_2d;
@@ -287,7 +296,88 @@ title("Pressure contours")
     
 %}
     
+
+    % Testing for Writing file options for debugging purposes.
+    %{
+    xRange = -4:4; 
+    yRange = -4:4;
     
+    % initialize empty data place holders
+    [X,Y]= meshgrid(xRange,yRange);
+    totalElement = size(X,1)*size(X,2);
+    xElemNum = length(xRange);
+    yElemNum = length(yRange);
+    
+    rng(1,'philox')
+    U(:,:,1) = rand(xElemNum, yElemNum);
+    rng(2,'philox')
+    U(:,:,2) = rand(xElemNum, yElemNum);
+    rng(3,'philox')
+    U(:,:,3) = rand(xElemNum, yElemNum);
+    rng(4,'philox')
+    U(:,:,4) = rand(xElemNum, yElemNum);
+    
+    writematrix(U,'U.csv','Delimiter',',') %this will save it as 2D matrix, piled together.
+ %}
+
+    % Check for spatial du/dt computation again 
+    %what does not make sense to me is why we are getting a skewed towards
+    %the corners in the U, so lets just plot everything
+    % turns out to be a mistake with the case in the interioirregion, i am
+    % computing the interior equation insstead of the proper boundary when
+    % one of the coordinate is in the interior region.
+     
+    %{
+    xRange = -23:dx:23; 
+    yRange = -23:dy:23;
+    [X,Y]= meshgrid(xRange,yRange);
+    close all
+    
+    figure1 = figure();
+    U_17 = readmatrix('U_17.csv');
+    U_17 = reshape(U_17, [47,47,4]);
+    surf(X(:,:),Y(:,:),U_17(:,:,1))
+    title("density at time step 17")
+    xlabel("x")
+    ylabel("y")
+    
+    figure2 = figure();
+    U_18 = readmatrix('U_18.csv');
+    U_18 = reshape(U_18, [47,47,4]);
+    surf(X(:,:),Y(:,:),U_18(:,:,1))
+    title("density at time step 18")
+    xlabel("x")
+    ylabel("y")
+    
+    figure3 = figure();
+    K1_17 = readmatrix('K1_17.csv');
+    K1_17 = reshape(K1_17, [47,47,4]);
+    surf(X(:,:),Y(:,:),K1_17(:,:,1))
+    title("K1 density at time step 17")
+    xlabel("x")
+    ylabel("y")
+    
+    % let us check a couple points manually for the update. 
+    % if this is correctly implemented, then it is a question of the scheme
+   
+  
+    R = sqrt(X.^2+Y.^2);
+    cosTheta = Y./R;
+    sinTheta = X./R;
+    Source = STest(X,Y,17);
+    
+    %{ check more points tomorrow.
+    % check x = 0, y = -23 
+    j_Index = 24; 
+    i_Index = 1;
+    E_0_N23 = dot(coeffM(1,:),U_17(i_Index,j_Index-3:j_Index+3,1)).*(c*cosTheta(i_Index,j_Index));
+    F_0_N23 = dot(coeffM(7,:),U_17(i_Index:i_Index+6,j_Index,1)).*(c*sinTheta(i_Index,j_Index));
+    U_0_N23 = U_17(i_Index,j_Index).*(c/(2*R(i_Index,j_Index)));
+    K1_0_N23 = -1.*(E_0_N23+F_0_N23+U_0_N23);
+   
+    K1_17_Computed = assembleK(17,S,mean_Values,gamma,c,U_17,xRange,yRange,coeffM);
+    K1_0_N23 == K1_17_Computed(i_Index,j_Index)
+    %}
 %% Functions
 
 
@@ -309,14 +399,30 @@ title("Pressure contours")
 %   Unp1: the next time step values, non-dimensionalized here. 
 
 function Unp1 = RK4(Un,t,S,dt,mean_Values, gamma, c,Rs,xRange,yRange,coeffM)
-    %Standar RK 4
+    %Standard RK 4
     t_vec = [t, t+1/2*dt, t+1/2*dt,t+dt];
     K1 = assembleK(t_vec(1),S,mean_Values,gamma,c,Un,xRange,yRange,coeffM);
     K2 = assembleK(t_vec(2),S,mean_Values,gamma,c,Un+(0.5*dt).*K1,xRange,yRange,coeffM);
     K3 = assembleK(t_vec(3),S,mean_Values,gamma,c,Un+(0.5*dt).*K2,xRange,yRange,coeffM);
     K4 = assembleK(t_vec(4),S,mean_Values,gamma,c,Un+(1*dt).*K3,xRange,yRange,coeffM);
     Unp1 = Un+ (1/6).*(K1+2.*K2+2.*K3+K4);
-
+    
+    
+    %lets save all the stuff I want.
+    %{
+    if (t == 17)
+        writematrix(Un,'U_17.csv','Delimiter',',')
+        writematrix(K1,'K1_17.csv','Delimiter',',')
+        writematrix(K2,'K2_17.csv','Delimiter',',')
+        writematrix(K3,'K3_17.csv','Delimiter',',')
+        writematrix(K4,'K4_17.csv','Delimiter',',')
+        writematrix(Unp1,'U_18.csv','Delimiter',',')
+              
+    elseif(t == 18)
+        
+    end
+    %}
+    
     % paper version
     %{
     c_List = [1,0.5,0.162997,0.0407574];
@@ -382,23 +488,40 @@ function K = assembleK(t,S,mean_Values,gamma,c,U,xRange,yRange,coeffM)
     %Better Method
      for i = 1:iEnd
         for j = 1:jEnd
+            %i = 1; 
+            %j = 24;
+            
+            r = sqrt(xRange(j)^2 + yRange(i)^2);
+            cosTheta = yRange(i)/r;
+            sinTheta=  xRange(j)/r;
             %initialize the terms
             E = zeros(4,1);
             F = zeros(4,1);
-    
+            
+         
+            
             % Lets compute the E(x derivatives)
             if( j>= 4 && j<=interiorEndXDir)
-                %we are in the interior x domain
-                E = assembleE7Point(coeffM(1,:),gamma,c,mean_Values,U(i,j-3:j+3,1),U(i,j-3:j+3,2),U(i,j-3:j+3,3),U(i,j-3:j+3,4));
-                E = (1/dx).*E;
+                
+                %need a couple more cases here to check if we are in
+                %interior or outside
+                if(i >=  4 && i<= interiorEndYDir)
+                     %we are in the interior x domain   
+                     E = assembleE7Point(coeffM(1,:),gamma,c,mean_Values,U(i,j-3:j+3,1),U(i,j-3:j+3,2),U(i,j-3:j+3,3),U(i,j-3:j+3,4));
+                     E = (1/dx).*E;
+                else
+                     rowIndices = j-3:j+3;
+                     for z = 1:4
+                        test = dot(coeffM(1,:),U(i,rowIndices,z) ).*(c*cosTheta);
+                        E(z,1) = (1/dx).*test;
+                     end
+                end
             elseif(j<=3)
                 %we are in the left boundary x domain (spatially)
                 %need forward differencing here
                 %E = c*cos*theta*dU/dx
                 
                 rowIndices = 1:7;
-                r = sqrt(xRange(j)^2 + yRange(j)^2);
-                cosTheta = yRange(i)/r;
                 for z = 1:4
                    test = dot(coeffM(7-j+1,:),U(i,rowIndices,z) ).*(c*cosTheta);
                    E(z,1) = test;
@@ -412,8 +535,6 @@ function K = assembleK(t,S,mean_Values,gamma,c,U,xRange,yRange,coeffM)
                 rowIndices = jEnd-6: jEnd;
                 
                 %E = c*cos*theta*dU/dx
-                r = sqrt(xRange(j)^2 + yRange(j)^2);
-                cosTheta = yRange(i)/r;
                 for z = 1:4
                    E(z,1) = dot(coeffM(coeffIndex,:), U(i,rowIndices,z) ).*(c*cosTheta);
                 end
@@ -424,9 +545,19 @@ function K = assembleK(t,S,mean_Values,gamma,c,U,xRange,yRange,coeffM)
             
             %lets compute the F(y Derivatives)
             if( i>= 4 && i<=interiorEndYDir)
-                %we are in the interior y domain
-                F = assembleF7Point(coeffM(1,:),gamma,c,mean_Values,U(i-3:i+3,j,1),U(i-3:i+3,j,2),U(i-3:i+3,j,3),U(i-3:i+3,j,4));
-                F = (1/dx).*F;
+                if( j>= 4 && j<=interiorEndXDir)
+                    %interior y domain
+                    F = assembleF7Point(coeffM(1,:),gamma,c,mean_Values,U(i-3:i+3,j,1),U(i-3:i+3,j,2),U(i-3:i+3,j,3),U(i-3:i+3,j,4));
+                    F = (1/dy).*F;
+                else
+                    coeffIndex = 1;
+                    colIndices = i-3:i+3;
+                
+                    %F = c0*sinTheta*dU/dy
+                    for z = 1:4
+                       F(z,1) = dot(coeffM(coeffIndex,:), U(colIndices,j,z) ).*(c*sinTheta);
+                    end
+                end 
             elseif(i<=3)
                 % we are at the bottom boundary region (spatially)
                 % need forward differencing 
@@ -434,8 +565,6 @@ function K = assembleK(t,S,mean_Values,gamma,c,U,xRange,yRange,coeffM)
                 colIndices = 1:7;
                 
                 %F = c0*sinTheta*dU/dy
-                r = sqrt(xRange(j)^2 + yRange(i)^2);
-                sinTheta = xRange(j)/r;
                 for z = 1:4
                    F(z,1) = dot(coeffM(coeffIndex,:), U(colIndices,j,z) ).*(c*sinTheta);
                 end
@@ -448,8 +577,6 @@ function K = assembleK(t,S,mean_Values,gamma,c,U,xRange,yRange,coeffM)
                 colIndices = iEnd-6:iEnd;
                 
                 %F = c0*sinTheta*dU/dy
-                r = sqrt(xRange(j)^2 + yRange(i)^2);
-                sinTheta = xRange(j)/r;
                 for z = 1:4
                    F(z,1) = dot(coeffM(coeffIndex,:), U(colIndices,j,z) ).*(c*sinTheta);
                 end
@@ -464,10 +591,8 @@ function K = assembleK(t,S,mean_Values,gamma,c,U,xRange,yRange,coeffM)
                 K(i,j,1:4) = -1.*(E+F)+S_ij;
             else
                 %boundary region another expression for du/dt
-                %du/dt = -c0*cosTheta*du/dx - c0*sinTheta*du/dx - c/2r*U
+                %du/dt = -c0*cosTheta*du/dx - c0*sinTheta*du/dy - c/2r*U
                 %=-(E+F+c/2r*U)
-                
-                r = sqrt(xRange(j)^2 + yRange(i)^2);
                 U_ij = reshape(U(i,j,:),[4,1]);
                 K(i,j,1:4)  = -1.*(E+F+(c/(2*r)).*U_ij);
             end 
@@ -577,3 +702,5 @@ function F = assembleF7Point(a_Values,gamma,c,mean_Values,rho_Col,u_Col,v_Col,p_
     F(4) = dot(a_Values, gamma.*(p_Mean/rho_Mean).*v_Col);
 
 end 
+
+
